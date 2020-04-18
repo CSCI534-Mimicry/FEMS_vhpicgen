@@ -5,6 +5,7 @@ import inspect, os, time
 sys.path.append(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))+ '/libs64')
 
 from flask import Flask, request
+from flask_cors import *
 import vhmsg_python
 
 import threading
@@ -32,6 +33,8 @@ curr_sex = ""
 def reset_au():
     for key in action_units:
         action_units[key] = 0
+    print(action_units)
+    send_adjust_au_msg(0)
 
 def set_au(au_1, au_2, au_4, au_5, au_6, au_7, au_10, au_12, au_25, au_26, au_45):
     reset_au()
@@ -56,7 +59,7 @@ def set_au_from_form(form_dict):
 def is_action_unit_key_has_lr(key):
     return key == 'au_1' or key == 'au_2' or key == 'au_4' or key == 'au_12' or key == 'au_45'
 
-def send_adjust_au_msg():
+def send_adjust_au_msg(wait_time=2):
     send_msg_arr = []
     for key in action_units:
         if is_action_unit_key_has_lr(key) == True:
@@ -64,7 +67,7 @@ def send_adjust_au_msg():
             send_msg_arr.append('sbm char * viseme ' + key + '_right ' + str(action_units[key]))
         else:
             send_msg_arr.append('sbm char * viseme ' + key + ' ' + str(action_units[key]))
-    send_msg(send_msg_arr, 3)
+    send_msg(send_msg_arr, wait_time)
 
 def set_male():
     global curr_sex
@@ -117,7 +120,7 @@ def record():
     ret = vhmsg_python.wait(1)
     PrintResult(ret)
 
-    time.sleep(2)
+    time.sleep(1.5)
 
     print "Attempting to send ..."
     ret = vhmsg_python.send("renderer_record stop")
@@ -127,17 +130,19 @@ def record():
     ret = vhmsg_python.wait(1)
     PrintResult(ret)
 
-    time.sleep(2)
+    time.sleep(1.5)
 
 @app.route("/receive_au", methods=["POST"])
+@cross_origin()
 def receive_au():
     global curr_sex
-    sex = request.form["sex"]
-    user = request.form["user"]
-    mny = request.form["mny"]
+    sex = request.json["sex"]
+    user = request.json["user"]
+    mny = request.json["mny"]
+
     sem.acquire()
-    set_au_from_form(request.form)
     connect()
+    set_au_from_form(request.json)
     if sex != curr_sex:
         if sex == "m":
             set_male()
@@ -156,18 +161,19 @@ def receive_au():
         record()
         close()
         os.system("ffmpeg.exe -i E:/vhtoolkit/bin/vhtoolkitUnity/movie.avi -frames:v 1 static/out1.png")
-    filename = "out-" + user + "-" + mny + ".png"
+    filename = "out-" + str(user) + "-" + str(mny) + ".png"
     os.system("magick static/out1.png -flip static/" + filename)
     if os.path.exists("static/out1.png"):
         os.remove("static/out1.png")
     
     sem.release()
-    return "/static/" + filename
+    return "/" + filename
 
 @app.route('/')
 def index():
     return 'Hello, worker!'
 
-app.run()
+CORS(app, supports_credentials=True)
+app.run(port=22500)
 
 # renderer background file Ict07.jpg
