@@ -6,6 +6,7 @@ sys.path.append(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentf
 
 from flask import Flask, request
 from flask_cors import *
+from gevent.pywsgi import WSGIServer
 import vhmsg_python
 
 import threading
@@ -51,7 +52,6 @@ def set_au(au_1, au_2, au_4, au_5, au_6, au_7, au_10, au_12, au_25, au_26, au_45
     action_units['au_45'] = au_45
 
 def set_au_from_form(form_dict):
-    reset_au()
     for key in action_units:
         if key in form_dict:
             action_units[key] = form_dict[key]
@@ -173,7 +173,32 @@ def receive_au():
 def index():
     return 'Hello, worker!'
 
+@app.route("/get_record", methods=["GET"])
+def record_request():
+    import uuid
+
+    sem.acquire()
+    connect()
+    record()
+    close()
+    os.system("ffmpeg.exe -i E:/vhtoolkit/bin/vhtoolkitUnity/movie.avi -frames:v 1 static/out1.png")
+    while not os.path.exists("static/out1.png"):
+        connect()
+        record()
+        close()
+        os.system("ffmpeg.exe -i E:/vhtoolkit/bin/vhtoolkitUnity/movie.avi -frames:v 1 static/out1.png")
+    filename = "sample-out-" + str(uuid.uuid4()) + ".png"
+    os.system("magick static/out1.png -flip static/" + filename)
+    if os.path.exists("static/out1.png"):
+        os.remove("static/out1.png")
+    
+    sem.release()
+    return "/" + filename
+
+
 CORS(app, supports_credentials=True)
-app.run(port=22500)
+# app.run(port=22500)
+http_server = WSGIServer(('', 22500), app)
+http_server.serve_forever()
 
 # renderer background file Ict07.jpg
